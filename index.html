@@ -118,6 +118,15 @@ footer{background:var(--paper); border-top:1px solid var(--line); padding:8px 10
   .panel.open{transform:none}
 }
 </style>
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://bmalmberg.github.io/stalingrad-map/">
+<meta property="og:title" content="Places in &quot;High Summer and the Road to Stalingrad&quot;">
+<meta property="og:description" content="Interactive map of the places and events in chapter 9 of John Erickson's The Road to Stalingrad, from Kharkov and the Crimea to the Caucasus and the streets of Stalingrad, 1942.">
+<meta property="og:image" content="https://bmalmberg.github.io/stalingrad-map/preview.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="description" content="Interactive map of the places and events in chapter 9 of John Erickson's The Road to Stalingrad.">
 </head>
 <body>
 <div class="app">
@@ -737,6 +746,9 @@ for(const g of Object.keys(GROUPS)){
   chips.appendChild(b);
 }
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{chips.querySelectorAll('i').forEach((i,n)=>i.style.background=col(Object.keys(GROUPS)[n])); render();});
+
+// open on the first event
+requestAnimationFrame(()=>showEvent(0));
 
 window.addEventListener('resize',()=>{
   fit(); drawBase(); pts.forEach(p=>{const xy=proj([p.lo,p.la]); p.x=xy[0]; p.y=xy[1];}); render();
