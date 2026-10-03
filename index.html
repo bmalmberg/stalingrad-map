@@ -88,6 +88,9 @@ footer{background:var(--paper); border-top:1px solid var(--line); padding:8px 10
 .sw{width:11px;height:11px;border-radius:50%;display:inline-block;background:var(--ink-soft)}
 .sw.h{background:var(--paper); border:1.5px dashed var(--ink-soft)}
 .pt.dim{opacity:.16}
+.pt.prev{opacity:.45}
+.plabel.prevl{opacity:.45}
+.ov .prevev{opacity:.32}
 .ov path.arr{fill:none; stroke-width:3.2; stroke-linecap:round}
 .ov path.arr.de{stroke:var(--de)} .ov path.arr.su{stroke:var(--g-stal)}
 .ov path.arr.plan{stroke-dasharray:7 5}
@@ -521,7 +524,7 @@ const col = g => getComputedStyle(document.documentElement).getPropertyValue('--
 const svg = d3.select('#map'), wrap = document.getElementById('wrap');
 const root = svg.append('g');
 const gOv = svg.append('g').attr('class','ov');
-let T = d3.zoomIdentity, curEv = -1, evSet = null;
+let T = d3.zoomIdentity, curEv = -1, evSet = null, prevEv = -1, prevSet = null;
 const proj = d3.geoConicConformal().parallels([45,57]).rotate([-40,0]);
 const path = d3.geoPath(proj);
 const focusBox = {type:"MultiPoint", coordinates:[[27,40.2],[50.5,40.2],[27,60.5],[50.5,60.5]]};
@@ -588,7 +591,8 @@ function render(){
   ptSel.attr('transform',d=>`translate(${d.x},${d.y})`)
     .classed('hidden',d=>!visible[d.g])
     .classed('sel',d=>selected===d)
-    .classed('dim',d=>evSet && !evSet.has(d.n));
+    .classed('dim',d=>evSet && !evSet.has(d.n) && !(prevSet && prevSet.has(d.n)))
+    .classed('prev',d=>evSet && !evSet.has(d.n) && prevSet && prevSet.has(d.n));
   const base = d => (d.t===1?5:d.t===2?4:3.4);
   ptSel.select('.dot').attr('r',d=>base(d)/k).attr('fill',d=>col(d.g)).attr('stroke-width',1.1/k);
   ptSel.select('.ring').attr('r',d=>(base(d)+4)/k).attr('stroke-width',2/k);
@@ -596,7 +600,8 @@ function render(){
   const fs = d => (d.t===1?14:d.t===2?13:12)/k;
   labSel.attr('x',d=>d.x+(base(d)+3)/k).attr('y',d=>d.y+4/k)
     .attr('font-size',fs).attr('stroke-width',3/k)
-    .classed('hidden',d=>!visible[d.g] || (evSet ? !evSet.has(d.n) : (k<TIER_K[d.t] && selected!==d)));
+    .classed('hidden',d=>!visible[d.g] || (evSet ? !(evSet.has(d.n) || (prevSet && prevSet.has(d.n))) : (k<TIER_K[d.t] && selected!==d)))
+    .classed('prevl',d=>evSet && !evSet.has(d.n) && prevSet && prevSet.has(d.n));
   drawOverlay();
   gCity.classed('hidden', k<10);
   gCity.selectAll('path').attr('stroke-width',d=>d? __kmPx*1.0 : __kmPx*1.0 + 3/k);
@@ -676,16 +681,13 @@ const q=document.getElementById('q');
 q.addEventListener('input',()=>showList(q.value));
 q.addEventListener('keydown',e=>{ if(e.key==='Enter'){ const f=q.value.trim().toLowerCase(); const hit=pts.find(p=>p.n.toLowerCase().startsWith(f))||pts.find(p=>p.n.toLowerCase().includes(f)||(p.m||'').toLowerCase().includes(f)); if(hit){ q.blur(); select(hit,true);} }});
 
-function drawOverlay(){
-  gOv.selectAll('*').remove();
-  if(curEv<0) return;
-  const ev = EVENTS[curEv];
+function drawEv(ev, g){
   const P = (lon,lat)=>T.apply(proj([lon,lat]));
   if(ev.line){
     const pts2 = ev.line.map(c=>P(c[0],c[1]));
-    gOv.append('path').attr('class','front').attr('d',d3.line().curve(d3.curveCatmullRom)(pts2));
+    g.append('path').attr('class','front').attr('d',d3.line().curve(d3.curveCatmullRom)(pts2));
     const m = pts2[pts2.length-1];
-    gOv.append('text').attr('x',m[0]).attr('y',m[1]+20).attr('text-anchor','end').text(ev.lineLabel||'');
+    g.append('text').attr('x',m[0]).attr('y',m[1]+20).attr('text-anchor','end').text(ev.lineLabel||'');
   }
   for(const a of ev.a){
     const p0=P(a[0],a[1]), p1=P(a[2],a[3]);
@@ -695,18 +697,33 @@ function drawOverlay(){
     const hl=Math.min(14,L*0.35);
     const tx=p1[0]-c[0], ty=p1[1]-c[1], tl=Math.hypot(tx,ty), ux=tx/tl, uy=ty/tl;
     const end=[p1[0]-ux*hl*0.6, p1[1]-uy*hl*0.6];
-    gOv.append('path').attr('class','arr '+a[4]+(a[5]?' plan':'')).attr('d',`M${p0}Q${c} ${end}`);
+    g.append('path').attr('class','arr '+a[4]+(a[5]?' plan':'')).attr('d',`M${p0}Q${c} ${end}`);
     const b=[p1[0]-ux*hl, p1[1]-uy*hl];
-    gOv.append('path').attr('class','head '+a[4]).attr('d',`M${p1}L${b[0]-uy*hl*0.5},${b[1]+ux*hl*0.5}L${b[0]+uy*hl*0.5},${b[1]-ux*hl*0.5}Z`);
+    g.append('path').attr('class','head '+a[4]).attr('d',`M${p1}L${b[0]-uy*hl*0.5},${b[1]+ux*hl*0.5}L${b[0]+uy*hl*0.5},${b[1]-ux*hl*0.5}Z`);
   }
 }
+function drawOverlay(){
+  gOv.selectAll('*').remove();
+  if(curEv<0) return;
+  if(prevEv>=0) drawEv(EVENTS[prevEv], gOv.append('g').attr('class','prevev'));
+  drawEv(EVENTS[curEv], gOv.append('g'));
+}
 const byName = Object.fromEntries(pts.map(p=>[p.n,p]));
-function fitEvent(ev){
+function evPoints(ev){
   const xy = ev.p.map(n=>[byName[n].x,byName[n].y]);
   ev.a.forEach(a=>{xy.push(proj([a[0],a[1]]),proj([a[2],a[3]]));});
   (ev.line||[]).forEach(c=>xy.push(proj(c)));
-  const xs=xy.map(p=>p[0]), ys=xy.map(p=>p[1]);
-  const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  return xy;
+}
+function box(xy){const xs=xy.map(p=>p[0]), ys=xy.map(p=>p[1]); return [Math.min(...xs),Math.max(...xs),Math.min(...ys),Math.max(...ys)];}
+function fitEvent(ev, pev){
+  let [x0,x1,y0,y1] = box(evPoints(ev));
+  if(pev){
+    const [a0,a1,b0,b1] = box(evPoints(ev).concat(evPoints(pev)));
+    const s = Math.max(x1-x0, y1-y0, 1);
+    // include the previous event only if it doesn't force a much wider view
+    if(Math.max(a1-a0, b1-b0) <= 2.2*s){ x0=a0; x1=a1; y0=b0; y1=b1; }
+  }
   const narrow = matchMedia('(max-width:859px)').matches;
   const ph = narrow ? panel.getBoundingClientRect().height : 0;
   const vw = narrow? W : W-360, vh = narrow? Math.max(160, H-ph-8) : H, ox = narrow?0:360;
@@ -718,12 +735,13 @@ function showEvent(i){
   curEv=i; const ev=EVENTS[i]; evSet=new Set(ev.p); selected=null; panelMode='event';
   ptitle.textContent='Events of 1942';
   const ser = EVENTS.map((e,j)=>j).filter(j=>EVENTS[j].s===ev.s), pos = ser.indexOf(i);
+  prevEv = pos>0 ? ser[pos-1] : -1; prevSet = prevEv>=0 ? new Set(EVENTS[prevEv].p) : null;
   const hasSu = ev.a.some(a=>a[4]==='su')||ev.line, hasDe = ev.a.some(a=>a[4]==='de'), hasPlan = ev.a.some(a=>a[5]);
   pbody.innerHTML = `<div class="ev">
     <div class="tabs" role="tablist">${Object.entries(SERIES).map(([k,v])=>`<button role="tab" data-s="${k}" aria-selected="${+k===ev.s}">${esc(v)}</button>`).join('')}</div>
     <div class="evnav"><button id="evprev" ${pos===0?'disabled':''}>Previous</button><span>${pos+1} of ${ser.length}</span><button id="evnext" ${pos===ser.length-1?'disabled':''}>Next</button></div>
     <p class="date">${esc(ev.d)} 1942</p><p class="title">${esc(ev.t)}</p>
-    <div class="evkey">${hasDe?'<span><b style="background:var(--de)"></b>German</span>':''}${hasSu?'<span><b style="background:var(--g-stal)"></b>Soviet</span>':''}${hasPlan?'<span>Dashed: '+(ev.dashNote||(ev.s===1?'planned, from the captured papers':'planned or intended moves'))+'</span>':''}</div>
+    <div class="evkey">${hasDe?'<span><b style="background:var(--de)"></b>German</span>':''}${hasSu?'<span><b style="background:var(--g-stal)"></b>Soviet</span>':''}${prevEv>=0?'<span>Faded: previous event</span>':''}${hasPlan?'<span>Dashed: '+(ev.dashNote||(ev.s===1?'planned, from the captured papers':'planned or intended moves'))+'</span>':''}</div>
     <p class="body">${esc(ev.x)}</p>
     <ul class="evlist">${ser.map(j=>`<li><button data-j="${j}" aria-current="${j===i}"><em>${esc(EVENTS[j].d)}</em>${esc(EVENTS[j].t)}</button></li>`).join('')}</ul>
     <p class="note">Arrows show rough directions only, drawn from the book's descriptions.</p></div>`;
@@ -732,9 +750,9 @@ function showEvent(i){
   document.getElementById('evnext').onclick=()=>showEvent(ser[pos+1]);
   pbody.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{ const s=+b.dataset.s; if(s!==ev.s) showEvent(EVENTS.findIndex(e=>e.s===s)); });
   pbody.querySelectorAll('.evlist button').forEach(b=>b.onclick=()=>showEvent(+b.dataset.j));
-  openPanel(); render(); fitEvent(ev);
+  openPanel(); render(); fitEvent(ev, prevEv>=0?EVENTS[prevEv]:null);
 }
-function clearEvent(){ curEv=-1; evSet=null; }
+function clearEvent(){ curEv=-1; evSet=null; prevEv=-1; prevSet=null; }
 document.getElementById('evbtn').onclick=()=> panelMode==='event'?closePanel():showEvent(curEv<0?0:curEv);
 
 // chips
